@@ -3,37 +3,53 @@ name: data-pipeline-workflow
 on:
   # push: # uncomment to run on push
   schedule:
-    - cron: "35 0 * * *" # run every day at 12:35AM
-  workflow_dispatch:  # manual triggers
+    - cron: "35 0 * * *"   # run every day at 12:35AM
+  workflow_dispatch:        # manual trigger
 
 jobs:
   run-data-pipeline:
     runs-on: windows-latest
+
     steps:
       - name: Checkout repo content
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}  # Use the PAT instead of the default GITHUB_TOKEN
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
       - name: Setup python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13.3'
           cache: 'pip'
+
       - name: Install dependencies
         run: pip install -r requirements.txt
+
       - name: Run data pipeline
         env:
-          YT_API_KEY: ${{ secrets.YT_API_KEY }} # import API key
-        run: python etl.py # run data pipeline
-      - name: Check for changes # create env variable indicating if any changes were made
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+        run: python etl.py
+
+      - name: Check for changes
         id: git-check
+        shell: pwsh
         run: |
-          git config user.name 'github-actions'
-          git config user.email 'github-actions@github.com'
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
           git add .
-          git diff --staged --quiet || echo "changes=true" >> $GITHUB_ENV 
+
+          # Detect if anything changed
+          if ((git status --porcelain).Length -gt 0) {
+            "changes=true" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+          else {
+            "changes=false" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+
       - name: Commit and push if changes
-        if: env.changes == 'true' # if changes made push new data to repo
+        if: env.changes == 'true'
+        shell: pwsh
         run: |
-          git commit -m "updated video index"
+          git commit -m "updated video index" || echo "Nothing to commit"
           git push
